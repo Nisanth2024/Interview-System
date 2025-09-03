@@ -31,6 +31,8 @@ const profileRoutes = require('./routes/profile');
 const candidateRoutes = require('./routes/candidates');
 const assignedInterviewersRoutes = require('./routes/assignedInterviewers');
 const interviewsRoutes = require('./routes/interviews');
+
+const interviewQuestionsRoutes = require('./routes/interviewQuestions');
 const sectionsRoutes = require('./routes/sections');
 
 
@@ -40,6 +42,8 @@ app.use('/api', profileRoutes);
 app.use('/api/candidates', candidateRoutes);
 app.use('/api/assigned-interviewers', assignedInterviewersRoutes);
 app.use('/api/interviews', interviewsRoutes);
+
+app.use('/api/interview-questions', interviewQuestionsRoutes);
 app.use('/api/sections', sectionsRoutes);
 
 

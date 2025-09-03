@@ -1,4 +1,10 @@
 import { useRef, useState } from "react";
+import {
+  fetchInterviewQuestions,
+  createInterviewQuestion,
+  updateInterviewQuestion,
+  deleteInterviewQuestion
+} from "../lib/interviewQuestionsApi";
 import { AnimatePresence, motion } from "framer-motion";
 import { Header } from "../components/Header";
 import { Sidebar } from "../components/Sidebar";
@@ -318,20 +324,48 @@ export default function DashboardPage() {
   // State for breadcrumbs and top right components (moved from MainContent)
   const [department] = useState<'All' | 'Design Department' | 'Engineering Department'>('All');
 
-  // State for InterviewOverview components (moved from InterviewOverview)
-  const defaultQuestions = [
-    {
-      prompt: "How Do JavaScript And jQuery Vary?",
-      competency: "Team Building",
-      time: "10 Min",
-      level: "Pending",
-      editing: false,
-      deleted: false,
-      answer: '',
-      answering: false,
-    },
-  ];
-  const [questions, setQuestions] = useState(defaultQuestions);
+  // Interview Overview state (from backend)
+  type InterviewQuestion = {
+    _id?: string;
+    interviewId?: string;
+    prompt: string;
+    competency: string;
+    time: string;
+    level: string;
+    editing?: boolean;
+    deleted?: boolean;
+    answer?: string;
+    answering?: boolean;
+  };
+  const [questions, setQuestions] = useState<InterviewQuestion[]>([]);
+  const [questionsLoading, setQuestionsLoading] = useState(true);
+  // Use the first interview as the selected one for demo (or let user pick)
+  const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
+  // Set selectedInterviewId to first interview (or null)
+  useEffect(() => {
+    if (interviews.length > 0 && !selectedInterviewId) {
+      setSelectedInterviewId(interviews[0]._id || interviews[0].id);
+    }
+  }, [interviews, selectedInterviewId]);
+
+  // Fetch questions for selected interview
+  const fetchAndSetQuestions = async (interviewId: string) => {
+    const token = localStorage.getItem('token') || '';
+    setQuestionsLoading(true);
+    try {
+      const data = await fetchInterviewQuestions(interviewId, token);
+      setQuestions(Array.isArray(data) ? data : []);
+    } catch {
+      setQuestions([]);
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedInterviewId) return;
+    fetchAndSetQuestions(selectedInterviewId);
+  }, [selectedInterviewId]);
   const [isInterviewOverviewVisible] = useState(true);
   const editingBlockRef = useRef<HTMLDivElement | null>(null);
   const editPromptInputRef = useRef<HTMLInputElement | null>(null);
@@ -1123,21 +1157,20 @@ export default function DashboardPage() {
                           variant="ghost"
                           size="sm"
                           className="p-2 md:p-3 bg-white text-black hover:bg-emerald-700 hover:text-white"
-                          onClick={() => {
-                            setQuestions(prev => [
-                              ...prev,
-                              {
-                                prompt: 'New Question',
-                                competency: 'Team Building',
-                                time: '10 Min',
-                                level: 'Pending',
-                                editing: true,
-                                deleted: false,
-                                answer: '',
-                                answering: false,
-                              },
-                            ]);
-                            editingBlockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          onClick={async () => {
+                            if (!selectedInterviewId) return;
+                            const token = localStorage.getItem('token') || '';
+                            const newQ = {
+                              interviewId: selectedInterviewId,
+                              prompt: 'New Question',
+                              competency: 'Team Building',
+                              time: '10 Min',
+                              level: 'Pending',
+                            };
+                            try {
+                              await createInterviewQuestion(newQ, token);
+                              await fetchAndSetQuestions(selectedInterviewId);
+                            } catch {}
                           }}
                         >
                           <Plus className="w-4 h-4 md:w-5 md:h-5" />
@@ -1310,7 +1343,14 @@ export default function DashboardPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="text-red-600" onClick={() => setQuestions([])}>
+                          <DropdownMenuItem className="text-red-600" onClick={async () => {
+                            if (!selectedInterviewId) return;
+                            const token = localStorage.getItem('token') || '';
+                            for (const q of questions) {
+                              if (q._id) await deleteInterviewQuestion(q._id, token);
+                            }
+                            await fetchAndSetQuestions(selectedInterviewId);
+                          }}>
                             <Typography variant="span" size="sm">Delete All Questions</Typography>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -1329,7 +1369,11 @@ export default function DashboardPage() {
                         <CardContent className="-mt-4 pb-0 px-4 flex flex-col flex-1 min-h-0">
                           {/* Only one question visible, rest scrollable, scrollbar hidden */}
                           <div className="flex-1 min-h-0">
-                            {questions.length > 0 && (
+                            {questionsLoading ? (
+                              <div className="flex items-center justify-center py-8">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-700"></div>
+                              </div>
+                            ) : questions.length > 0 && (
                               <Card className="w-full bg-white rounded-lg border shadow-sm p-2 sm:p-3 md:p-4 flex flex-col sm:flex-row items-start gap-2 sm:gap-3 mb-2 transition-all duration-200">
                                 <Badge className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 bg-gray-200 text-black rounded-full flex items-center justify-center font-semibold flex-shrink-0 text-xs sm:text-sm md:text-base">
                                   {currentQuestionIdx + 1}
@@ -1360,7 +1404,8 @@ export default function DashboardPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="hover:bg-emerald-700 hover:text-white"
-                                    onClick={() => {
+                                    onClick={async () => {
+                                      // Set editing true for this question
                                       setQuestions(prev => prev.map((item, i) => i === currentQuestionIdx ? { ...item, editing: true } : { ...item, editing: false }));
                                     }}
                                   >
@@ -1370,8 +1415,12 @@ export default function DashboardPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="hover:bg-emerald-700 hover:text-white"
-                                    onClick={() => {
-                                      setQuestions(prev => prev.filter((_, i) => i !== currentQuestionIdx));
+                                    onClick={async () => {
+                                      if (!selectedInterviewId) return;
+                                      const token = localStorage.getItem('token') || '';
+                                      const q = questions[currentQuestionIdx];
+                                      if (q._id) await deleteInterviewQuestion(q._id, token);
+                                      await fetchAndSetQuestions(selectedInterviewId);
                                       setCurrentQuestionIdx(idx => Math.max(0, idx - 1));
                                     }}
                                   >
@@ -1381,12 +1430,15 @@ export default function DashboardPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="hover:bg-emerald-700 hover:text-white"
-                                    onClick={() => {
-                                      setQuestions(prev => {
-                                        const copy = [...prev];
-                                        copy.splice(currentQuestionIdx + 1, 0, { ...questions[currentQuestionIdx] });
-                                        return copy;
-                                      });
+                                    onClick={async () => {
+                                      if (!selectedInterviewId) return;
+                                      // Duplicate question in backend and UI
+                                      const token = localStorage.getItem('token') || '';
+                                      const q = questions[currentQuestionIdx];
+                                      const newQ = { ...q, prompt: q.prompt + ' (Copy)', interviewId: selectedInterviewId };
+                                      delete newQ._id;
+                                      await createInterviewQuestion(newQ, token);
+                                      await fetchAndSetQuestions(selectedInterviewId);
                                     }}
                                   >
                                     <Copy className="w-4 h-4" />
@@ -1404,7 +1456,6 @@ export default function DashboardPage() {
                                   >
                                     <ChevronDown className="w-4 h-4" />
                                   </Button>
-                                  
                                 </Flex>
                               </Card>
                             )}
@@ -1498,18 +1549,21 @@ export default function DashboardPage() {
                                             <Card
                                               key={template.id}
                                               className="cursor-pointer hover:border-primary transition-colors"
-                                              onClick={() => {
-                                                setQuestions(prev => [
-                                                  ...prev,
-                                                  ...template.questions.map(q => ({
+                                              onClick={async () => {
+                                                if (!selectedInterviewId) return;
+                                                const token = localStorage.getItem('token') || '';
+                                                for (const q of template.questions) {
+                                                  await createInterviewQuestion({
                                                     ...q,
                                                     time: q.time + ' Min',
                                                     editing: false,
                                                     deleted: false,
                                                     answer: '',
                                                     answering: false,
-                                                  }))
-                                                ]);
+                                                    interviewId: selectedInterviewId,
+                                                  }, token);
+                                                }
+                                                await fetchAndSetQuestions(selectedInterviewId);
                                                 setLibraryOpen(false);
                                               }}
                                             >
@@ -1610,7 +1664,12 @@ export default function DashboardPage() {
                                               answer: "",
                                               answering: false,
                                             };
-                                            setQuestions(prev => [...prev, newQuestion]);
+                                            // Save to backend
+                                            if (!selectedInterviewId) return;
+                                            const token = localStorage.getItem('token') || '';
+                                            createInterviewQuestion({ ...newQuestion, interviewId: selectedInterviewId }, token).then(async () => {
+                                              await fetchAndSetQuestions(selectedInterviewId);
+                                            });
                                             setNewPrompt("");
                                             setNewCompetency("Team Building");
                                             setNewTime("10");
