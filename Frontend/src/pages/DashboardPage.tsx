@@ -739,6 +739,8 @@ export default function DashboardPage() {
   };
 
   // Interview Rounds Components
+  // State for current question index in Previous Background card
+  const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const Round1Card = ({ onViewCandidates }: { onViewCandidates: () => void }) => {
     const round1Candidates = getCandidatesByStage('Round 1');
     const displayCandidates = round1Candidates.slice(0, 3);
@@ -1013,7 +1015,7 @@ export default function DashboardPage() {
                             </div>
                           )}
                         </div>
-                        <Button variant="outline" size="sm" className="flex items-center gap-2 text-xs px-3 py-2 min-w-[100px] hover:bg-emerald-700 hover:text-white transition-colors duration-200" onClick={handleExport}>
+                        <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-2 text-xs px-3 py-2 min-w-[100px] hover:bg-emerald-700 hover:text-white transition-colors duration-200" onClick={handleExport}>
                           <FileDown className="w-4 h-4" />
                           <Typography variant="span" size="xs" className="hidden sm:inline">Export</Typography>
                         </Button>
@@ -1327,116 +1329,85 @@ export default function DashboardPage() {
                         <CardContent className="-mt-4 pb-0 px-4 flex flex-col flex-1 min-h-0">
                           {/* Only one question visible, rest scrollable, scrollbar hidden */}
                           <div className="flex-1 min-h-0">
-                            <div className="overflow-y-auto h-[88px] scrollbar-none pr-2">
-                              {questions.map((q, idx) => (
-                                <div key={idx} className="flex items-start gap-2 mb-1 border-b pb-2 last:border-b-0 last:mb-0 last:pb-0 min-h-[88px] max-h-[88px]">
-                                  <Badge className="w-6 h-6 md:w-7 md:h-7 bg-gray-200 text-black rounded-full flex items-center justify-center font-semibold flex-shrink-0">{idx + 1}</Badge>
-                                  <div className="flex-1 min-w-0">
-                                    <Typography variant="h4" size="lg" weight="medium" className="text-sm md:text-base lg:text-lg leading-snug break-words">
-                                      {q.prompt}
-                                    </Typography>
-                                    <Typography variant="p" size="xs" color="muted" className="text-gray-500 text-[10px] mt-0">
-                                      {q.time} • {q.competency} • {q.level}
-                                    </Typography>
-                                  </div>
-                                  <Flex align="center" gap={1} className="flex-shrink-0">
-                                    {/* Edit */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      onClick={() => {
-                                        setQuestions(prev => prev.map((item, i) => i === idx ? { ...item, editing: true } : { ...item, editing: false }));
-                                      }}
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                    {/* Delete */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      onClick={() => {
-                                        setQuestions(prev => prev.filter((_, i) => i !== idx));
-                                      }}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                    {/* Duplicate */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      onClick={() => {
-                                        setQuestions(prev => {
-                                          const copy = [...prev];
-                                          copy.splice(idx + 1, 0, { ...q });
-                                          return copy;
-                                        });
-                                      }}
-                                    >
-                                      <Copy className="w-4 h-4" />
-                                    </Button>
-                                    {/* Move Up */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      disabled={idx === 0}
-                                      onClick={() => {
-                                        if (idx === 0) return;
-                                        setQuestions(prev => {
-                                          const copy = [...prev];
-                                          [copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]];
-                                          return copy;
-                                        });
-                                      }}
-                                    >
-                                      <ChevronUp className="w-4 h-4" />
-                                    </Button>
-                                    {/* Move Down */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      disabled={idx === questions.length - 1}
-                                      onClick={() => {
-                                        if (idx === questions.length - 1) return;
-                                        setQuestions(prev => {
-                                          const copy = [...prev];
-                                          [copy[idx], copy[idx + 1]] = [copy[idx + 1], copy[idx]];
-                                          return copy;
-                                        });
-                                      }}
-                                    >
-                                      <ChevronDown className="w-4 h-4" />
-                                    </Button>
-                                    {/* Preview */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      onClick={() => {
-                                        alert(`Preview:\n${q.prompt}\nCompetency: ${q.competency}\nTime: ${q.time}\nLevel: ${q.level}`);
-                                      }}
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                    </Button>
-                                    {/* Add to Library */}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-emerald-700 hover:text-white"
-                                      onClick={() => {
-                                        alert('Added to library!');
-                                      }}
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                    </Button>
-                                  </Flex>
+                            {questions.length > 0 && (
+                              <Card className="w-full bg-white rounded-lg border shadow-sm p-2 sm:p-3 md:p-4 flex flex-col sm:flex-row items-start gap-2 sm:gap-3 mb-2 transition-all duration-200">
+                                <Badge className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 bg-gray-200 text-black rounded-full flex items-center justify-center font-semibold flex-shrink-0 text-xs sm:text-sm md:text-base">
+                                  {currentQuestionIdx + 1}
+                                </Badge>
+                                <div className="flex-1 min-w-0">
+                                  <Typography variant="h4" size="lg" weight="medium" className="text-xs sm:text-sm md:text-base lg:text-lg leading-snug break-words">
+                                    {questions[currentQuestionIdx].prompt}
+                                  </Typography>
+                                  <Typography variant="p" size="xs" color="muted" className="text-gray-500 text-[10px] sm:text-xs md:text-sm mt-1">
+                                    {questions[currentQuestionIdx].time} • {questions[currentQuestionIdx].competency} • {questions[currentQuestionIdx].level}
+                                  </Typography>
                                 </div>
-                              ))}
-                            </div>
+                                <Flex align="center" gap={1} className="flex-shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-emerald-700 hover:text-white"
+                                    disabled={currentQuestionIdx === 0}
+                                    onClick={() => {
+                                      if (currentQuestionIdx > 0) {
+                                        setCurrentQuestionIdx(idx => idx - 1);
+                                      }
+                                    }}
+                                  >
+                                    <ChevronUp className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-emerald-700 hover:text-white"
+                                    onClick={() => {
+                                      setQuestions(prev => prev.map((item, i) => i === currentQuestionIdx ? { ...item, editing: true } : { ...item, editing: false }));
+                                    }}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-emerald-700 hover:text-white"
+                                    onClick={() => {
+                                      setQuestions(prev => prev.filter((_, i) => i !== currentQuestionIdx));
+                                      setCurrentQuestionIdx(idx => Math.max(0, idx - 1));
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-emerald-700 hover:text-white"
+                                    onClick={() => {
+                                      setQuestions(prev => {
+                                        const copy = [...prev];
+                                        copy.splice(currentQuestionIdx + 1, 0, { ...questions[currentQuestionIdx] });
+                                        return copy;
+                                      });
+                                    }}
+                                  >
+                                    <Copy className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-emerald-700 hover:text-white"
+                                    disabled={currentQuestionIdx === questions.length - 1}
+                                    onClick={() => {
+                                      if (currentQuestionIdx < questions.length - 1) {
+                                        setCurrentQuestionIdx(idx => idx + 1);
+                                      }
+                                    }}
+                                  >
+                                    <ChevronDown className="w-4 h-4" />
+                                  </Button>
+                                  
+                                </Flex>
+                              </Card>
+                            )}
                           </div>
 
                           {/* Editing Block */}
