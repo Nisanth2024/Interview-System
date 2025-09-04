@@ -8,8 +8,11 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { Header } from "../components/Header";
 import { Sidebar } from "../components/Sidebar";
+import { NotificationCard } from "../components/NotificationCard";
 
 import { useEffect } from 'react';
+import { useNotifications } from "../lib/notificationContext";
+import { cn } from "@/lib/utils";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { HelpCircle, X, UserPlus, Clock, Eye, ArrowRight, Users, Bell, FileText, ChevronRight, ChevronDown, Download, Filter as FilterIcon, Plus, MoreHorizontal, Edit, Trash2, ChevronUp, Copy, FileDown } from "lucide-react";
+import { HelpCircle, X, UserPlus, Eye, ArrowRight, Users, Bell, FileText, ChevronRight, ChevronDown, Download, Filter as FilterIcon, Plus, MoreHorizontal, Edit, Trash2, ChevronUp, Copy, FileDown, Check, Calendar, UserCheck, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 // Candidate type definition (matches backend)
@@ -68,6 +71,32 @@ export default function DashboardPage() {
   // State for interviews and candidate view modal
   const [interviews, setInterviews] = useState<any[]>([]);
   const [viewCandidatesStage, setViewCandidatesStage] = useState<string | null>(null);
+  const { 
+    notifications, 
+    unreadCount, 
+    loading,
+    markAsRead, 
+    markAllAsRead, 
+    removeNotification, 
+    clearAllNotifications,
+    addNotification,
+    refreshNotifications,
+    initializeForUser
+  } = useNotifications();
+
+  const formatTimeAgo = (timestamp: Date) => {
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    return `${diffInDays}d`;
+  };
 
   // Fetch interviews on mount
   useEffect(() => {
@@ -273,35 +302,23 @@ export default function DashboardPage() {
         .then(data => {
           if (data && data._id) {
             setCandidates(prev => [...prev, data]);
+            // Add notification for new candidate
+            addNotification({
+              type: 'candidate',
+              title: 'New Candidate Added',
+              message: `${person.name} has been added to ${person.department}`,
+              icon: '👤'
+            });
+            // Refresh notifications to get the latest from backend
+            refreshNotifications();
             navigate('/candidates');
             setDepartmentFilter(person.department as 'All' | 'Design Department' | 'Engineering Department');
           }
         });
-    } else {
-      // Interviewer creation: POST to backend and update state
-      const token = localStorage.getItem('token');
-      const newInterviewer = {
-        name: person.name,
-        avatar: person.avatar || `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 50)}.jpg`,
-      };
-      fetch('http://localhost:5000/api/assigned-interviewers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(newInterviewer)
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data && data._id) {
-            setInterviewers(prev => [...prev, data]);
-            setShowInterviewersModal(true); // Show modal with new interviewer
-          }
-        });
-    }
   }
+}
 
+// Delete candidate handler
   // Delete candidate handler
 
   // Add a ref to control AddPersonModal from outside Header
@@ -309,7 +326,6 @@ export default function DashboardPage() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const [newNote, setNewNote] = useState("");
-  const [isModalOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   // Highlights card detail dialog state
   const [highlightOpen, setHighlightOpen] = useState(false);
@@ -378,12 +394,59 @@ export default function DashboardPage() {
       createPromptInputRef.current?.focus();
     }, 100);
   };
+
+  // Handler to open edit question dialog
+  const handleOpenEditQuestion = (question: InterviewQuestion) => {
+    setEditingQuestion(question);
+    setEditQuestionForm({
+      prompt: question.prompt,
+      competency: question.competency,
+      time: question.time.replace(' Min', '').replace('min', '').trim(),
+      level: question.level
+    });
+    setEditQuestionOpen(true);
+  };
+
+  // Handler to save edited question
+  const handleSaveEditedQuestion = async () => {
+    if (!editingQuestion || !selectedInterviewId) return;
+    
+    const token = localStorage.getItem('token') || '';
+    const updatedQuestion = {
+      ...editingQuestion,
+      prompt: editQuestionForm.prompt,
+      competency: editQuestionForm.competency,
+      time: editQuestionForm.time + ' Min',
+      level: editQuestionForm.level
+    };
+    
+    try {
+      if (editingQuestion._id) {
+        await updateInterviewQuestion(editingQuestion._id, updatedQuestion, token);
+      }
+      await fetchAndSetQuestions(selectedInterviewId);
+      setEditQuestionOpen(false);
+      setEditingQuestion(null);
+    } catch (error) {
+      console.error('Failed to update question:', error);
+    }
+  };
   const [newPrompt, setNewPrompt] = useState("");
   const [newCompetency, setNewCompetency] = useState("Team Building");
   const [newTime, setNewTime] = useState("10");
   const [newLevel, setNewLevel] = useState("Pending");
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [librarySearch, setLibrarySearch] = useState("");
+  
+  // Edit Question Dialog State
+  const [editQuestionOpen, setEditQuestionOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<InterviewQuestion | null>(null);
+  const [editQuestionForm, setEditQuestionForm] = useState({
+    prompt: '',
+    competency: 'Team Building',
+    time: '10',
+    level: 'Pending'
+  });
 
   // Predefined templates for Insert From Library
   const predefinedTemplates = [
@@ -974,54 +1037,82 @@ export default function DashboardPage() {
           <div className="flex-1 h-full bg-black/30 z-40" onClick={() => setIsSidebarOpen(false)}></div>
         </div>
       )}
+      
+      {/* Notification Panel */}
+      {isNotificationOpen && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div className="flex-1 bg-black/30" onClick={() => setIsNotificationOpen(false)}></div>
+          <div className="w-full max-w-md h-full bg-white shadow-2xl transform transition-transform duration-300 ease-in-out">
+            <div className="h-full flex flex-col">
+              <div className="p-4 border-b bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Notifications</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsNotificationOpen(false)}
+                    className="p-1 hover:bg-gray-200"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <NotificationCard className="h-full border-0 rounded-none shadow-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <div className="md:pl-60 h-screen pt-10">
-        <div className="h-full overflow-y-auto p-2 sm:p-3 md:p-4 ipadpro:max-w-[900px] ipadpro:mx-auto">
-          <div className="flex flex-1 flex-col min-h-[calc(100vh-64px)]">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key="main"
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 24 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-              >
-                {/* Breadcrumbs and Page Title */}
-                <div className="w-full px-0 pt-4 pb-0">
-                  <div className="mb-0 -pl-1 -mt-1 sm:mb-1 md:mb-2 lg:mb-3 flex-shrink-0">
-                    <Flex align="center" gap={2} className="flex-wrap items-center space-x-1 md:space-x-2 text-xs md:text-sm text-gray-600 mb-2">
-                      <Typography variant="span" size="xs" color="muted">Candidates</Typography>
-                      <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
-                      <Typography variant="span" size="xs" color="muted" className="hidden sm:inline">Junior FrontEnd Developer</Typography>
-                      <Typography variant="span" size="xs" color="muted" className="sm:hidden">Junior FrontEnd Developer</Typography>
-                      <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
-                      <Typography variant="span" size="xs" weight="medium" className="text-black">Round 3</Typography>
-                    </Flex>
-                    <Flex align="center" justify="between" className="flex-col md:flex-row md:items-center md:justify-between w-full gap-0 md:gap-2 lg:flex-nowrap lg:w-auto lg:space-x-2">
-                      {/* Move Round title to the left on small screens */}
-                      <Typography
-                        variant="h2"
-                        size="lg"
-                        weight="bold"
-                        className="text-lg md:text-xl lg:text-2xl w-full md:w-auto text-left md:text-center mb-2 md:mb-0"
-                      >
-                        Round
-                      </Typography>
-                      {/* All Departments, Export, Filter buttons at top right */}
-                      <Flex
-                        align="center"
-                        gap={3}
-                        className="flex-col sm:flex-row gap-3 w-full sm:w-auto md:ml-auto md:w-auto md:justify-end md:flex-row md:gap-3 lg:flex-nowrap lg:w-auto lg:space-x-2"
-                      >
-                        <div className="relative">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="items-center space-x-1 text-xs px-2 py-1 min-w-[90px] hover:bg-emerald-700 hover:text-white hidden sm:flex"
-                            onClick={handleDropdown}
-                          >
-                            <Typography variant="span" size="xs">{department === 'All' ? 'All Departments' : department}</Typography>
-                            <ChevronDown className="w-3 h-3" />
+    <div className="md:pl-60 h-screen pt-10">
+      <div className="h-full overflow-y-auto p-2 sm:p-3 md:p-4 ipadpro:max-w-[900px] ipadpro:mx-auto">
+        <div className="flex flex-1 flex-col min-h-[calc(100vh-64px)]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key="main"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              {/* Breadcrumbs and Page Title */}
+              <div className="w-full px-0 pt-4 pb-0">
+                <div className="mb-0 -pl-1 -mt-1 sm:mb-1 md:mb-2 lg:mb-3 flex-shrink-0">
+                  <Flex align="center" gap={2} className="flex-wrap items-center space-x-1 md:space-x-2 text-xs md:text-sm text-gray-600 mb-2">
+                    <Typography variant="span" size="xs" color="muted">Candidates</Typography>
+                    <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
+                    <Typography variant="span" size="xs" color="muted" className="hidden sm:inline">Junior FrontEnd Developer</Typography>
+                    <Typography variant="span" size="xs" color="muted" className="sm:hidden">Junior FrontEnd Developer</Typography>
+                    <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
+                    <Typography variant="span" size="xs" weight="medium" className="text-black">Round 3</Typography>
+                  </Flex>
+                  <Flex align="center" justify="between" className="flex-col md:flex-row md:items-center md:justify-between w-full gap-0 md:gap-2 lg:flex-nowrap lg:w-auto lg:space-x-2">
+                    {/* Move Round title to the left on small screens */}
+                    <Typography
+                      variant="h2"
+                      size="lg"
+                      weight="bold"
+                      className="text-lg md:text-xl lg:text-2xl w-full md:w-auto text-left md:text-center mb-2 md:mb-0"
+                    >
+                      Round
+                    </Typography>
+                    {/* All Departments, Export, Filter buttons at top right */}
+                    <Flex
+                      align="center"
+                      gap={3}
+                      className="flex-col sm:flex-row gap-3 w-full sm:w-auto md:ml-auto md:w-auto md:justify-end md:flex-row md:gap-3 lg:flex-nowrap lg:w-auto lg:space-x-2"
+                    >
+                      <div className="relative">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="items-center space-x-1 text-xs px-2 py-1 min-w-[90px] hover:bg-emerald-700 hover:text-white hidden sm:flex"
+                          onClick={handleDropdown}
+                        >
+                          <Typography variant="span" size="xs">{department === 'All' ? 'All Departments' : department}</Typography>
+                          <ChevronDown className="w-3 h-3" />
                           </Button>
                           {dropdownOpen && (
                             <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow z-50 ">
@@ -1170,6 +1261,13 @@ export default function DashboardPage() {
                             try {
                               await createInterviewQuestion(newQ, token);
                               await fetchAndSetQuestions(selectedInterviewId);
+                              // Add notification for new interview question
+                              addNotification({
+                                type: 'interview',
+                                title: 'New Interview Question Created',
+                                message: `Question "${newQ.prompt.substring(0, 50)}..." has been added`,
+                                icon: '📝'
+                              });
                             } catch {}
                           }}
                         >
@@ -1276,8 +1374,7 @@ export default function DashboardPage() {
                             <Flex align="center" justify="between" className="w-full gap-2">
                             <Button
                               size="lg"
-                                className="text-[10px] sm:text-xs md:text-sm lg:text-sm xl:text-base 2xl:text-xs px-2 sm:px-3 md:px-4 lg:px-4 xl:px-5 2xl:px-2 py-1 sm:py-1.5 md:py-2 lg:py-2 xl:py-2.5 2xl:py-1 h-6 sm:h-7 md:h-8 lg:h-8 xl:h-9 2xl:h-6 bg-black text-white hover:bg-emerald-700 hover:text-white font-medium ml-2 sm:ml-3 mr-2 sm:mr-2 md:mr-3 lg:mr-4 xl:mr-5"
-                             
+                              className="text-[10px] sm:text-xs md:text-sm lg:text-sm xl:text-base 2xl:text-xs px-2 sm:px-3 md:px-4 lg:px-4 xl:px-5 2xl:px-2 py-1 sm:py-1.5 md:py-2 lg:py-2 xl:py-2.5 2xl:py-1 h-6 sm:h-7 md:h-8 lg:h-8 xl:h-9 2xl:h-6 bg-black text-white hover:bg-emerald-700 hover:text-white font-medium ml-2 sm:ml-3 mr-2 sm:mr-2 md:mr-3 lg:mr-4 xl:mr-5"
                               onClick={() => {
                                 setIsNotificationOpen(true);
                                 setShowAllNotifications(true);
@@ -1288,7 +1385,6 @@ export default function DashboardPage() {
                             </Button>
                             <Button
                               variant="outline"
-
                               size="sm"
                               className="text-[10px] sm:text-xs md:text-sm lg:text-sm xl:text-base 2xl:text-xs px-2 sm:px-3 md:px-4 lg:px-4 xl:px-5 2xl:px-2 py-1 sm:py-1.5 md:py-2 lg:py-2 xl:py-2.5 2xl:py-1 h-6 sm:h-7 md:h-8 lg:h-8 xl:h-9 2xl:h-6 bg-gray-200 hover:bg-emerald-700 font-medium mr-2 sm:mr-2 md:mr-3 lg:mr-4 xl:mr-5"
                               onClick={() => setNotesOpen(true)}
@@ -1404,9 +1500,8 @@ export default function DashboardPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="hover:bg-emerald-700 hover:text-white"
-                                    onClick={async () => {
-                                      // Set editing true for this question
-                                      setQuestions(prev => prev.map((item, i) => i === currentQuestionIdx ? { ...item, editing: true } : { ...item, editing: false }));
+                                    onClick={() => {
+                                      handleOpenEditQuestion(questions[currentQuestionIdx]);
                                     }}
                                   >
                                     <Edit className="w-4 h-4" />
@@ -1669,6 +1764,13 @@ export default function DashboardPage() {
                                             const token = localStorage.getItem('token') || '';
                                             createInterviewQuestion({ ...newQuestion, interviewId: selectedInterviewId }, token).then(async () => {
                                               await fetchAndSetQuestions(selectedInterviewId);
+                                              // Add notification for new interview question
+                                              addNotification({
+                                                type: 'interview',
+                                                title: 'New Interview Question Created',
+                                                message: `Question "${newQuestion.prompt.substring(0, 50)}..." has been added`,
+                                                icon: '📝'
+                                              });
                                             });
                                             setNewPrompt("");
                                             setNewCompetency("Team Building");
@@ -2229,199 +2331,201 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Responsive Notification Dropdown/Modal - Single Source of Truth */}
+      {/* Responsive Notification Sidebar using ShadCN */}
       {isNotificationOpen && (
         <>
-          {/* Mobile: Full-screen slide-in panel */}
-          <div className="md:hidden fixed inset-y-0 right-0 z-[9999] transform transition-transform duration-300 ease-in-out">
-        <Card className="w-80 h-full rounded-none border-0 shadow-lg">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-            <CardTitle className="text-lg font-semibold">Notifications</CardTitle>
-            <Button 
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setIsNotificationOpen(false)
-                setShowAllNotifications(false)
-              }}
-                  className="p-1.5 hover:bg-emerald-700 rounded-lg"
-            >
-                  <X className="w-4 h-4" />
-            </Button>
-          </CardHeader>
-              <CardContent className="flex-1 p-2">
-            <ScrollArea className={`h-full ${showAllNotifications ? 'overflow-y-auto' : 'overflow-hidden'}`}>
-                  <div className="space-y-1.5">
-                {/* Always show the first notification */}
-                    <Card className="hover:bg-gray-50 transition-colors cursor-pointer border border-gray-200">
-                      <CardContent className="p-2">
-                        <Flex align="center" gap={2} className="w-full">
-                          <Bell className="w-4 h-4 text-black flex-shrink-0" />
-                          <Stack spacing={0} className="flex-1 min-w-0">
-                            <Typography variant="p" size="sm" weight="medium" className="text-xs leading-tight">
-                              PRO mode activated
-                            </Typography>
-                            <Typography variant="p" size="xs" color="muted" className="text-xs text-gray-500 truncate">
-                              All premium features are now available for your account
-                            </Typography>
-                          </Stack>
-                          <ArrowRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                        </Flex>
-                  </CardContent>
-                </Card>
-                {showAllNotifications && (
-                  <>
-                        <Card className="hover:bg-gray-50 transition-colors cursor-pointer border border-gray-200" onClick={() => setAddPersonModalOpen(true)}>
-                          <CardContent className="p-2">
-                            <Flex align="center" gap={2} className="w-full">
-                              <Users className="w-4 h-4 text-black flex-shrink-0" />
-                              <Stack spacing={0} className="flex-1 min-w-0">
-                                <Typography variant="p" size="sm" weight="medium" className="text-xs leading-tight">
-                                  New candidate added
-                                </Typography>
-                                <Typography variant="p" size="xs" color="muted" className="text-xs text-gray-500 truncate">
-                                  Alex Johnson has entered...
-                                </Typography>
-                              </Stack>
-                              <ArrowRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                            </Flex>
-                      </CardContent>
-                    </Card>
-                        <Card className="hover:bg-gray-50 transition-colors border border-gray-200">
-                          <CardContent className="p-2">
-                            <Flex align="center" gap={2} className="w-full">
-                              <Clock className="w-4 h-4 text-black flex-shrink-0" />
-                              <Stack spacing={0} className="flex-1 min-w-0">
-                                <Typography variant="p" size="sm" weight="medium" className="text-xs leading-tight">
-                                  Phase deadline soon
-                                </Typography>
-                                <Typography variant="p" size="xs" color="muted" className="text-xs text-gray-500 truncate">
-                                  Initial Review Phase 3 ends in 2 days
-                                </Typography>
-                              </Stack>
-                              <ArrowRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                            </Flex>
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
+          {/* Mobile backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/20 sm:hidden z-40" 
+            onClick={() => setIsNotificationOpen(false)}
+          />
+          
+          {/* Notification Panel */}
+          <Card className="fixed right-0 top-0 h-full w-full sm:w-48 md:w-44 lg:w-48 xl:w-52 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 border-r-0 border-t-0 border-b-0 rounded-none z-50">
+            <CardHeader className="pb-2 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30">
+                    <Bell className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</CardTitle>
+                  {unreadCount > 0 && (
+                    <Badge variant="destructive" className="text-xs bg-red-500 hover:bg-red-600 px-1.5 py-0.5">
+                      {unreadCount}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {notifications.length > 0 && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={markAllAsRead}
+                        className="text-xs px-2 py-1 h-auto text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800"
+                        disabled={unreadCount === 0}
+                      >
+                        <Check className="w-3 h-3 mr-1" />
+                        <span className="hidden sm:inline">Mark all</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllNotifications}
+                        className="text-xs px-2 py-1 h-auto text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30"
+                        title="Clear all notifications"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsNotificationOpen(false)}
+                    className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
-            </ScrollArea>
-          </CardContent>
-              <CardFooter className="p-2 border-t">
-                <Flex align="center" justify="center" className="w-full gap-2">
-              <Button 
-                onClick={handleSeeAllNotifications}
-                    className="flex-1 bg-black text-white hover:bg-emerald-700 text-[11px] h-6"
-              >
-                {showAllNotifications ? 'Show less' : 'See all notifications'}
-              </Button>
-              <Button 
-                variant="outline"
-                size="sm"
-                    className="text-[11px] h-6 border border-gray-300 hover:bg-emerald-700"
-                onClick={() => setNotesOpen(true)}
-              >
-                Notes
-              </Button>
-                </Flex>
-          </CardFooter>
-        </Card>
-      </div>
-
-          {/* Desktop: Dropdown modal */}
-        <Card className="hidden md:block fixed top-20 right-8 z-[9999] w-96 shadow-xl border animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-            <CardTitle className="text-lg font-semibold">Notifications</CardTitle>
-            <Button 
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setIsNotificationOpen(false)
-                setShowAllNotifications(false)
-              }}
-                className="p-1.5 hover:bg-emerald-700 rounded-lg"
-            >
-                <X className="w-4 h-4" />
-            </Button>
-          </CardHeader>
-            <CardContent className="p-2">
-            <ScrollArea className={`${showAllNotifications ? 'overflow-y-auto' : 'overflow-hidden'}`}>
-                <div className="space-y-1.5">
-                  <Card className="hover:bg-gray-50 transition-colors cursor-pointer border border-gray-200">
-                    <CardContent className="p-1">
-                      <Flex align="center" gap={2} className="w-full">
-                        <Bell className="w-3 h-3 text-black flex-shrink-0" />
-                        <Stack spacing={0} className="flex-1 min-w-0">
-                          <Typography variant="p" size="sm" weight="medium" className="text-xs leading-tight">
-                            PRO mode activated
-                          </Typography>
-                          <Typography variant="p" size="xs" color="muted" className="text-xs text-gray-500 truncate">
-                            All premium features are now available for your account
-                          </Typography>
-                        </Stack>
-                        <ArrowRight className="w-2 h-2 text-gray-400 flex-shrink-0" />
-                      </Flex>
-                  </CardContent>
-                </Card>
-                {showAllNotifications && (
-                  <>
-                      <Card className="hover:bg-gray-50 transition-colors border border-gray-200">
-                        <CardContent className="p-1">
-                          <Flex align="center" gap={2} className="w-full">
-                            <Users className="w-3 h-3 text-black flex-shrink-0" />
-                            <Stack spacing={0} className="flex-1 min-w-0">
-                              <Typography variant="p" size="sm" weight="medium" className="text-xs leading-tight">
-                                New candidate added
-                              </Typography>
-                              <Typography variant="p" size="xs" color="muted" className="text-xs text-gray-500 truncate">
-                                Alex Johnson has entered the Technical Review phase
-                              </Typography>
-                            </Stack>
-                            <ArrowRight className="w-2 h-2 text-gray-400 flex-shrink-0" />
-                          </Flex>
-                      </CardContent>
-                    </Card>
-                      <Card className="hover:bg-gray-50 transition-colors border border-gray-200">
-                        <CardContent className="p-1">
-                          <Flex align="center" gap={2} className="w-full">
-                            <Clock className="w-3 h-3 text-black flex-shrink-0" />
-                            <Stack spacing={0} className="flex-1 min-w-0">
-                              <Typography variant="p" size="sm" weight="medium" className="text-xs leading-tight">
-                                Phase deadline soon
-                              </Typography>
-                              <Typography variant="p" size="xs" color="muted" className="text-xs text-gray-500 truncate">
-                                Initial Review Phase 3 ends in 2 days
-                              </Typography>
-                            </Stack>
-                            <ArrowRight className="w-2 h-2 text-gray-400 flex-shrink-0" />
-                          </Flex>
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
+            </CardHeader>
+            
+            <CardContent className="p-0 flex-1 overflow-hidden">
+              <ScrollArea className="h-full px-2 sm:px-3 py-1.5">
+                <div className="space-y-2 sm:space-y-3">
+                  {loading ? (
+                    <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mb-2"></div>
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Loading notifications...</p>
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
+                      <Bell className="w-8 h-8 sm:w-12 sm:h-12 text-slate-300 dark:text-slate-600 mb-2 sm:mb-3" />
+                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">No notifications</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">You're all caught up!</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification, index) => (
+                      <div key={notification.id}>
+                        <div
+                          className={cn(
+                            "relative p-2 sm:p-3 rounded-lg border transition-all duration-200 hover:shadow-sm",
+                            notification.read 
+                              ? "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-75" 
+                              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm"
+                          )}
+                        >
+                          {!notification.read && (
+                            <div className="absolute top-2 left-2 w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                          )}
+                          
+                          <div className="flex items-start gap-2 sm:gap-3 ml-2">
+                            <div className="flex-shrink-0 mt-0.5">
+                              <div className={cn(
+                                "p-1 sm:p-1.5 rounded-md",
+                                notification.type === 'interview' && "bg-blue-100 dark:bg-blue-900/30",
+                                notification.type === 'candidate' && "bg-green-100 dark:bg-green-900/30",
+                                notification.type === 'general' && "bg-amber-100 dark:bg-amber-900/30",
+                                notification.type === 'interviewer' && "bg-purple-100 dark:bg-purple-900/30"
+                              )}>
+                                {notification.type === 'interview' && <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400" />}
+                                {notification.type === 'candidate' && <UserCheck className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-600 dark:text-green-400" />}
+                                {notification.type === 'general' && <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600 dark:text-amber-400" />}
+                                {notification.type === 'interviewer' && <Bell className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-purple-600 dark:text-purple-400" />}
+                              </div>
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-1 sm:gap-2">
+                                <div className="flex-1">
+                                  <h4 className={cn(
+                                    "text-xs sm:text-sm font-medium leading-tight",
+                                    notification.read ? "text-slate-600 dark:text-slate-400" : "text-slate-900 dark:text-slate-100"
+                                  )}>
+                                    {notification.title}
+                                  </h4>
+                                  <p className={cn(
+                                    "text-xs mt-0.5 sm:mt-1 leading-relaxed line-clamp-2",
+                                    notification.read ? "text-slate-500 dark:text-slate-500" : "text-slate-600 dark:text-slate-400"
+                                  )}>
+                                    {notification.message}
+                                  </p>
+                                  <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
+                                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                                      {formatTimeAgo(notification.timestamp)}
+                                    </span>
+                                    <Badge 
+                                      variant="outline" 
+                                      className="text-xs px-1.5 py-0.5 h-auto capitalize"
+                                    >
+                                      {notification.type}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {!notification.read && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => markAsRead(notification.id)}
+                                      className="w-5 h-5 sm:w-6 sm:h-6 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                                      title="Mark as read"
+                                    >
+                                      <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeNotification(notification.id)}
+                                    className="w-5 h-5 sm:w-6 sm:h-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 hover:text-red-600"
+                                    title="Remove notification"
+                                  >
+                                    <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {index < notifications.length - 1 && (
+                          <Separator className="my-2 sm:my-3 bg-slate-200 dark:bg-slate-700" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+            
+            {/* Footer with responsive buttons */}
+            <div className="border-t border-slate-200 dark:border-slate-700 p-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+              <div className="flex flex-col gap-1.5">
+                <Button 
+                  className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 shadow-sm text-xs h-7" 
+                  onClick={() => {
+                    refreshNotifications();
+                    setIsNotificationOpen(false);
+                  }}
+                >
+                  <Bell className="w-2.5 h-2.5 mr-1" />
+                  <span className="hidden sm:inline">Refresh & Close</span>
+                  <span className="sm:hidden">Refresh</span>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs h-7"
+                  onClick={() => setNotesOpen(true)}
+                >
+                  <FileText className="w-2.5 h-2.5 mr-1" />
+                  Notes
+                </Button>
               </div>
-            </ScrollArea>
-          </CardContent>
-            <CardFooter className="p-2 pt-0 w-full bg-transparent">
-              <Flex align="center" justify="center" className="w-full gap-2">
-              <Button 
-                onClick={handleSeeAllNotifications}
-                  className="flex-1 bg-black text-white hover:bg-emerald-700 text-[11px] h-6"
-              >
-                {showAllNotifications ? 'Show less' : 'See all notifications'}
-              </Button>
-              <Button 
-                variant="outline"
-                size="sm"
-                  className="text-[11px] h-6 border border-gray-300 hover:bg-emerald-700"
-                onClick={() => setNotesOpen(true)}
-              >
-                Notes
-              </Button>
-              </Flex>
-          </CardFooter>
-        </Card>
+            </div>
+          </Card>
         </>
       )}
       {/* Notes Modal */}
@@ -2615,6 +2719,129 @@ export default function DashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Question Dialog */}
+      <Dialog open={editQuestionOpen} onOpenChange={setEditQuestionOpen}>
+        <DialogContent className="max-w-4xl w-full mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold">Edit Question</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Update the question details below.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Prompt Field - Full width on mobile, spans both columns on larger screens */}
+              <div className="lg:col-span-2">
+                <Label htmlFor="edit-prompt" className="text-sm font-medium mb-2 block">
+                  Question Prompt *
+                </Label>
+                <Textarea
+                  id="edit-prompt"
+                  className="w-full min-h-[100px] resize-none bg-white"
+                  placeholder="Enter your question here..."
+                  value={editQuestionForm.prompt}
+                  onChange={(e) => setEditQuestionForm(prev => ({ ...prev, prompt: e.target.value }))}
+                />
+              </div>
+              
+              {/* Competency Field */}
+              <div>
+                <Label htmlFor="edit-competency" className="text-sm font-medium mb-2 block">
+                  Competency
+                </Label>
+                <Select 
+                  value={editQuestionForm.competency} 
+                  onValueChange={(value) => setEditQuestionForm(prev => ({ ...prev, competency: value }))}
+                >
+                  <SelectTrigger className="w-full bg-white">
+                    <SelectValue placeholder="Select competency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Team Building">Team Building</SelectItem>
+                    <SelectItem value="Technical Skills">Technical Skills</SelectItem>
+                    <SelectItem value="Communication">Communication</SelectItem>
+                    <SelectItem value="Problem Solving">Problem Solving</SelectItem>
+                    <SelectItem value="Leadership">Leadership</SelectItem>
+                    <SelectItem value="JavaScript Fundamentals">JavaScript Fundamentals</SelectItem>
+                    <SelectItem value="JavaScript Concepts">JavaScript Concepts</SelectItem>
+                    <SelectItem value="DOM Manipulation">DOM Manipulation</SelectItem>
+                    <SelectItem value="System Architecture">System Architecture</SelectItem>
+                    <SelectItem value="System Design">System Design</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Time Field */}
+              <div>
+                <Label htmlFor="edit-time" className="text-sm font-medium mb-2 block">
+                  Time (minutes)
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="edit-time"
+                    type="number"
+                    className="w-20 text-center bg-white"
+                    placeholder="10"
+                    value={editQuestionForm.time}
+                    onChange={(e) => setEditQuestionForm(prev => ({ ...prev, time: e.target.value }))}
+                    min="1"
+                    max="60"
+                  />
+                  <span className="text-sm text-gray-500">min</span>
+                </div>
+              </div>
+              
+              {/* Level Field - Full width on mobile */}
+              <div className="lg:col-span-2">
+                <Label htmlFor="edit-level" className="text-sm font-medium mb-2 block">
+                  Difficulty Level
+                </Label>
+                <Select 
+                  value={editQuestionForm.level} 
+                  onValueChange={(value) => setEditQuestionForm(prev => ({ ...prev, level: value }))}
+                >
+                  <SelectTrigger className="w-full lg:w-48 bg-white">
+                    <SelectValue placeholder="Select level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Beginner">Beginner</SelectItem>
+                    <SelectItem value="Intermediate">Intermediate</SelectItem>
+                    <SelectItem value="Advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditQuestionOpen(false);
+                setEditingQuestion(null);
+                setEditQuestionForm({
+                  prompt: '',
+                  competency: 'Team Building',
+                  time: '10',
+                  level: 'Pending'
+                });
+              }}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEditedQuestion}
+              disabled={!editQuestionForm.prompt.trim()}
+              className="w-full sm:w-auto bg-black text-white hover:bg-emerald-700"
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }

@@ -34,6 +34,7 @@ const interviewsRoutes = require('./routes/interviews');
 
 const interviewQuestionsRoutes = require('./routes/interviewQuestions');
 const sectionsRoutes = require('./routes/sections');
+const notificationsRoutes = require('./routes/notifications');
 
 
 app.use('/api/auth', authRoutes);
@@ -45,6 +46,7 @@ app.use('/api/interviews', interviewsRoutes);
 
 app.use('/api/interview-questions', interviewQuestionsRoutes);
 app.use('/api/sections', sectionsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 
 // Basic route

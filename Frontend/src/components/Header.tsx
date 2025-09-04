@@ -1,20 +1,22 @@
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { Flex } from "@/components/ui/flex"
-import { Stack } from "@/components/ui/stack"
-import { Typography } from "@/components/ui/typography"
-import { Card } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Search, UserPlus, Bell, Calendar, ArrowRight, ChevronDown, Menu, Plus, Settings } from "lucide-react"
-import { SearchModal } from "./SearchModal"
-import { AddPersonModal } from "./AddPersonModal"
-import { useTranslation } from "@/lib/useTranslation"
-import { useProfile } from "@/lib/profileContext"
-import { useNavigate } from "react-router-dom"
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Flex } from "@/components/ui/flex";
+import { Typography } from "@/components/ui/typography";
+import { Stack } from "@/components/ui/stack";
+import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Search, UserPlus, Bell, Calendar, ArrowRight, ChevronDown, Menu, Plus, Settings } from "lucide-react";
+import { SearchModal } from "./SearchModal";
+import { AddPersonModal } from "./AddPersonModal";
+import { useTranslation } from "@/lib/useTranslation";
+import { useProfile } from "@/lib/profileContext";
+import { useNotifications } from "@/lib/notificationContext";
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -40,6 +42,7 @@ export function Header({ onMenuClick, onNotificationClick, onCreateType, onAddPe
   const { profile, setProfile } = useProfile();
   const navigate = useNavigate();
   const t = useTranslation(language);
+  const { unreadCount, clearUserData } = useNotifications();
   // Get today's date in a readable format
   const today = new Date();
   const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -92,7 +95,11 @@ export function Header({ onMenuClick, onNotificationClick, onCreateType, onAddPe
             <Button variant="outline" size="sm" className="hidden sm:flex relative p-1 md:p-1 fullscreen:hidden bg-grey-300 text-black hover:bg-emerald-700 hover:text-white transition-colors items-center gap-1" onClick={handleNotificationClick}>
               <span className="relative flex items-center">
                 <Bell className="w-3 h-3 md:w-4 md:h-4" />
-                <Badge className="absolute -top-1 -right-1 w-2 h-2 md:w-2.5 md:h-2.5 bg-red-500 rounded-full"></Badge>
+                {unreadCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 w-4 h-4 md:w-5 md:h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] md:text-[10px] font-bold">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Badge>
+                )}
               </span>
               <Typography variant="span" size="xs" className="hidden sm:inline text-xs font-medium">{t.notification}</Typography>
             </Button>
@@ -118,6 +125,8 @@ export function Header({ onMenuClick, onNotificationClick, onCreateType, onAddPe
                 <DropdownMenuItem className="flex items-center gap-2 text-red-600" onClick={() => {
                   setProfile({ name: '', email: '', avatar: '' });
                   localStorage.removeItem('token');
+                  // Clear notification data on logout
+                  clearUserData();
                   navigate('/');
                 }}>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
