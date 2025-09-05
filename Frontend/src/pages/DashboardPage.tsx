@@ -8,7 +8,6 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { Header } from "../components/Header";
 import { Sidebar } from "../components/Sidebar";
-import { NotificationCard } from "../components/NotificationCard";
 
 import { useEffect } from 'react';
 import { useNotifications } from "../lib/notificationContext";
@@ -74,14 +73,9 @@ export default function DashboardPage() {
   const { 
     notifications, 
     unreadCount, 
-    loading,
-    markAsRead, 
-    markAllAsRead, 
-    removeNotification, 
-    clearAllNotifications,
-    addNotification,
+    addNotification, 
     refreshNotifications,
-    initializeForUser
+    setIsNotificationSidebarOpen
   } = useNotifications();
 
   const formatTimeAgo = (timestamp: Date) => {
@@ -123,8 +117,6 @@ export default function DashboardPage() {
   };
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false)
-  const [showAllNotifications, setShowAllNotifications] = useState(false)
   const [, setDepartmentFilter] = useState<'All' | 'Design Department' | 'Engineering Department'>('All')
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   // Fetch candidates and interviews from backend on mount
@@ -235,11 +227,12 @@ export default function DashboardPage() {
   // Toggle sidebar open/close
   const handleMenuClick = () => setIsSidebarOpen((open) => !open)
 
-  // Toggle notification panel open/close
-  const handleNotificationClick = () => setIsNotificationOpen((open) => !open)
+  // Handle notification click - directly opens the global sidebar
+  const handleNotificationClick = () => {
+    setIsNotificationSidebarOpen(true);
+  }
 
-  // Toggle between showing one or all notifications
-  const handleSeeAllNotifications = () => setShowAllNotifications(!showAllNotifications)
+
 
   // Navigation handlers
   const handleShowAllCandidates = () => {
@@ -305,9 +298,9 @@ export default function DashboardPage() {
             // Add notification for new candidate
             addNotification({
               type: 'candidate',
-              title: 'New Candidate Added',
+              title: 'Candidate Added Successfully',
               message: `${person.name} has been added to ${person.department}`,
-              icon: '👤'
+              icon: 'user-plus'
             });
             // Refresh notifications to get the latest from backend
             refreshNotifications();
@@ -1000,7 +993,7 @@ export default function DashboardPage() {
       <div className="fixed top-0 left-0 right-0 z-50">
         <Header 
           onMenuClick={handleMenuClick}
-          onNotificationClick={handleNotificationClick}
+    
           onAddPerson={handleAddPerson}
           onCreateType={(type) => {
             if (type === 'interview') {
@@ -1038,32 +1031,6 @@ export default function DashboardPage() {
         </div>
       )}
       
-      {/* Notification Panel */}
-      {isNotificationOpen && (
-        <div className="fixed inset-0 z-[60] flex justify-end">
-          <div className="flex-1 bg-black/30" onClick={() => setIsNotificationOpen(false)}></div>
-          <div className="w-full max-w-md h-full bg-white shadow-2xl transform transition-transform duration-300 ease-in-out">
-            <div className="h-full flex flex-col">
-              <div className="p-4 border-b bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Notifications</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsNotificationOpen(false)}
-                    className="p-1 hover:bg-gray-200"
-                  >
-                    <X className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <NotificationCard className="h-full border-0 rounded-none shadow-none" />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Content Area */}
     <div className="md:pl-60 h-screen pt-10">
@@ -1376,8 +1343,7 @@ export default function DashboardPage() {
                               size="lg"
                               className="text-[10px] sm:text-xs md:text-sm lg:text-sm xl:text-base 2xl:text-xs px-2 sm:px-3 md:px-4 lg:px-4 xl:px-5 2xl:px-2 py-1 sm:py-1.5 md:py-2 lg:py-2 xl:py-2.5 2xl:py-1 h-6 sm:h-7 md:h-8 lg:h-8 xl:h-9 2xl:h-6 bg-black text-white hover:bg-emerald-700 hover:text-white font-medium ml-2 sm:ml-3 mr-2 sm:mr-2 md:mr-3 lg:mr-4 xl:mr-5"
                               onClick={() => {
-                                setIsNotificationOpen(true);
-                                setShowAllNotifications(true);
+                                setIsNotificationSidebarOpen(true);
                               }}
                             >
                               <Typography variant="span" size="xs" className="text-white">See all notifications</Typography>
@@ -2331,203 +2297,7 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Responsive Notification Sidebar using ShadCN */}
-      {isNotificationOpen && (
-        <>
-          {/* Mobile backdrop */}
-          <div 
-            className="fixed inset-0 bg-black/20 sm:hidden z-40" 
-            onClick={() => setIsNotificationOpen(false)}
-          />
-          
-          {/* Notification Panel */}
-          <Card className="fixed right-0 top-0 h-full w-full sm:w-48 md:w-44 lg:w-48 xl:w-52 bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 border-r-0 border-t-0 border-b-0 rounded-none z-50">
-            <CardHeader className="pb-2 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <div className="p-1 rounded-md bg-emerald-100 dark:bg-emerald-900/30">
-                    <Bell className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <CardTitle className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</CardTitle>
-                  {unreadCount > 0 && (
-                    <Badge variant="destructive" className="text-xs bg-red-500 hover:bg-red-600 px-1.5 py-0.5">
-                      {unreadCount}
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {notifications.length > 0 && (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={markAllAsRead}
-                        className="text-xs px-2 py-1 h-auto text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800"
-                        disabled={unreadCount === 0}
-                      >
-                        <Check className="w-3 h-3 mr-1" />
-                        <span className="hidden sm:inline">Mark all</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearAllNotifications}
-                        className="text-xs px-2 py-1 h-auto text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30"
-                        title="Clear all notifications"
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsNotificationOpen(false)}
-                    className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="p-0 flex-1 overflow-hidden">
-              <ScrollArea className="h-full px-2 sm:px-3 py-1.5">
-                <div className="space-y-2 sm:space-y-3">
-                  {loading ? (
-                    <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mb-2"></div>
-                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Loading notifications...</p>
-                    </div>
-                  ) : notifications.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-6 sm:py-8 text-center">
-                      <Bell className="w-8 h-8 sm:w-12 sm:h-12 text-slate-300 dark:text-slate-600 mb-2 sm:mb-3" />
-                      <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">No notifications</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">You're all caught up!</p>
-                    </div>
-                  ) : (
-                    notifications.map((notification, index) => (
-                      <div key={notification.id}>
-                        <div
-                          className={cn(
-                            "relative p-2 sm:p-3 rounded-lg border transition-all duration-200 hover:shadow-sm",
-                            notification.read 
-                              ? "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-75" 
-                              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm"
-                          )}
-                        >
-                          {!notification.read && (
-                            <div className="absolute top-2 left-2 w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                          )}
-                          
-                          <div className="flex items-start gap-2 sm:gap-3 ml-2">
-                            <div className="flex-shrink-0 mt-0.5">
-                              <div className={cn(
-                                "p-1 sm:p-1.5 rounded-md",
-                                notification.type === 'interview' && "bg-blue-100 dark:bg-blue-900/30",
-                                notification.type === 'candidate' && "bg-green-100 dark:bg-green-900/30",
-                                notification.type === 'general' && "bg-amber-100 dark:bg-amber-900/30",
-                                notification.type === 'interviewer' && "bg-purple-100 dark:bg-purple-900/30"
-                              )}>
-                                {notification.type === 'interview' && <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-blue-600 dark:text-blue-400" />}
-                                {notification.type === 'candidate' && <UserCheck className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-600 dark:text-green-400" />}
-                                {notification.type === 'general' && <AlertCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-600 dark:text-amber-400" />}
-                                {notification.type === 'interviewer' && <Bell className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-purple-600 dark:text-purple-400" />}
-                              </div>
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-1 sm:gap-2">
-                                <div className="flex-1">
-                                  <h4 className={cn(
-                                    "text-xs sm:text-sm font-medium leading-tight",
-                                    notification.read ? "text-slate-600 dark:text-slate-400" : "text-slate-900 dark:text-slate-100"
-                                  )}>
-                                    {notification.title}
-                                  </h4>
-                                  <p className={cn(
-                                    "text-xs mt-0.5 sm:mt-1 leading-relaxed line-clamp-2",
-                                    notification.read ? "text-slate-500 dark:text-slate-500" : "text-slate-600 dark:text-slate-400"
-                                  )}>
-                                    {notification.message}
-                                  </p>
-                                  <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
-                                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                                      {formatTimeAgo(notification.timestamp)}
-                                    </span>
-                                    <Badge 
-                                      variant="outline" 
-                                      className="text-xs px-1.5 py-0.5 h-auto capitalize"
-                                    >
-                                      {notification.type}
-                                    </Badge>
-                                  </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  {!notification.read && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => markAsRead(notification.id)}
-                                      className="w-5 h-5 sm:w-6 sm:h-6 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/30"
-                                      title="Mark as read"
-                                    >
-                                      <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeNotification(notification.id)}
-                                    className="w-5 h-5 sm:w-6 sm:h-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 hover:text-red-600"
-                                    title="Remove notification"
-                                  >
-                                    <X className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {index < notifications.length - 1 && (
-                          <Separator className="my-2 sm:my-3 bg-slate-200 dark:bg-slate-700" />
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
-            </CardContent>
-            
-            {/* Footer with responsive buttons */}
-            <div className="border-t border-slate-200 dark:border-slate-700 p-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-              <div className="flex flex-col gap-1.5">
-                <Button 
-                  className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 shadow-sm text-xs h-7" 
-                  onClick={() => {
-                    refreshNotifications();
-                    setIsNotificationOpen(false);
-                  }}
-                >
-                  <Bell className="w-2.5 h-2.5 mr-1" />
-                  <span className="hidden sm:inline">Refresh & Close</span>
-                  <span className="sm:hidden">Refresh</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs h-7"
-                  onClick={() => setNotesOpen(true)}
-                >
-                  <FileText className="w-2.5 h-2.5 mr-1" />
-                  Notes
-                </Button>
-              </div>
-            </div>
-          </Card>
-        </>
-      )}
+      {/* Notification sidebar is now handled globally in Header component */}
       {/* Notes Modal */}
       <Dialog open={notesOpen} onOpenChange={setNotesOpen}>
         <DialogContent className="max-w-md">

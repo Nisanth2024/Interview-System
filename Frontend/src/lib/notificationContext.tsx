@@ -28,6 +28,8 @@ interface NotificationContextType {
   notifications: Notification[];
   unreadCount: number;
   loading: boolean;
+  isNotificationSidebarOpen: boolean;
+  setIsNotificationSidebarOpen: (open: boolean) => void;
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
@@ -57,6 +59,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isNotificationSidebarOpen, setIsNotificationSidebarOpen] = useState(false);
 
   // Transform backend notification to frontend format
   const transformNotification = (backendNotification: any): Notification => ({
@@ -204,6 +207,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     notifications,
     unreadCount,
     loading,
+    isNotificationSidebarOpen,
+    setIsNotificationSidebarOpen,
     addNotification,
     markAsRead,
     markAllAsRead,

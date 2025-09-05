@@ -94,10 +94,14 @@ exports.markAllAsRead = async (req, res) => {
   try {
     const { userId } = req.body;
     
-    const filter = userId ? { userId } : {};
+    // Only add userId to filter if it's provided and not null
+    const filter = { read: false };
+    if (userId && userId !== null) {
+      filter.userId = userId;
+    }
     
     const result = await Notification.updateMany(
-      { ...filter, read: false },
+      filter,
       { read: true }
     );
 
@@ -134,7 +138,11 @@ exports.clearAllNotifications = async (req, res) => {
   try {
     const { userId } = req.body;
     
-    const filter = userId ? { userId } : {};
+    // Only add userId to filter if it's provided and not null
+    const filter = {};
+    if (userId && userId !== null) {
+      filter.userId = userId;
+    }
     
     const result = await Notification.deleteMany(filter);
 

@@ -139,7 +139,7 @@ export function AddPersonModal({ open, onOpenChange, onAddPerson }: AddPersonMod
     setCandidateStatus('pending');
     setNewSkill('');
     onOpenChange(false);
-    showToast('Candidate added successfully!', 'success');
+    // Toast will be shown by the parent component
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -252,13 +252,36 @@ export function AddPersonModal({ open, onOpenChange, onAddPerson }: AddPersonMod
               </DropdownMenu>
             </Flex>
             {skills.length > 0 && (
-              <div style={{ maxHeight: '40px', overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }} className="flex flex-wrap gap-1 mt-1 hide-scrollbar">
-                {skills.map((skill, index) => (
-                  <Badge key={index} variant="secondary" className="flex items-center gap-1 text-xs px-2 py-1">
-                    <Typography variant="span" size="xs">{skill}</Typography>
-                    <X className="w-3 h-3 cursor-pointer hover:text-red-500 transition-colors" onClick={e => { e.stopPropagation(); handleRemoveSkill(skill); }} />
-                  </Badge>
-                ))}
+              <div className="mt-2 max-h-20 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  {skills.map((skill, index) => (
+                    <Badge 
+                      key={index} 
+                      variant="secondary" 
+                      className="group flex items-center gap-1 text-xs sm:text-sm px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-all duration-200 rounded-full"
+                    >
+                      <Typography variant="span" size="xs" className="font-medium">
+                        {skill}
+                      </Typography>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 p-0 hover:bg-red-100 hover:text-red-600 rounded-full transition-colors duration-200 group-hover:opacity-100 opacity-70"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveSkill(skill);
+                        }}
+                        title={`Remove ${skill}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+                <Typography variant="p" size="xs" color="muted" className="text-gray-500 mt-1">
+                  {skills.length} skill{skills.length !== 1 ? 's' : ''} added
+                </Typography>
               </div>
             )}
           </Stack>

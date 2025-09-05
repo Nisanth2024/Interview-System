@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,16 +10,16 @@ import { Typography } from "@/components/ui/typography";
 import { Stack } from "@/components/ui/stack";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, UserPlus, Bell, Calendar, ArrowRight, ChevronDown, Menu, Plus, Settings } from "lucide-react";
+import { Search, UserPlus, Bell, Calendar, ArrowRight, ChevronDown, Menu, Plus, Settings, X, Check, Users } from "lucide-react";
 import { SearchModal } from "./SearchModal";
 import { AddPersonModal } from "./AddPersonModal";
 import { useTranslation } from "@/lib/useTranslation";
 import { useProfile } from "@/lib/profileContext";
 import { useNotifications } from "@/lib/notificationContext";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   onMenuClick: () => void
-  onNotificationClick: () => void
   onCreateSection?: () => void
   onCreateType?: (type: 'interview' | 'round' | 'prompt' | 'candidate') => void
   onAddPerson?: (person: {
@@ -38,11 +37,24 @@ interface HeaderProps {
   setLanguage: (lang: 'en' | 'es' | 'fr') => void
 }
 
-export function Header({ onMenuClick, onNotificationClick, onCreateType, onAddPerson, language, setLanguage }: HeaderProps) {
+export function Header({ onMenuClick, onCreateType, onAddPerson, language, setLanguage }: HeaderProps) {
   const { profile, setProfile } = useProfile();
   const navigate = useNavigate();
   const t = useTranslation(language);
-  const { unreadCount, clearUserData } = useNotifications();
+  const { 
+    notifications, 
+    unreadCount, 
+    loading,
+    isNotificationSidebarOpen,
+    setIsNotificationSidebarOpen,
+    markAsRead, 
+    markAllAsRead, 
+    removeNotification, 
+    clearAllNotifications,
+    addNotification,
+    clearUserData
+  } = useNotifications();
+  
   // Get today's date in a readable format
   const today = new Date();
   const dateString = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -52,11 +64,25 @@ export function Header({ onMenuClick, onNotificationClick, onCreateType, onAddPe
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const [newNote, setNewNote] = useState("");
-  const [] = useState<'light' | 'dark'>("light");
 
-  // Handle notification click - call the parent handler
+  // Format time ago helper
+  const formatTimeAgo = (timestamp: Date) => {
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    return `${diffInDays}d`;
+  };
+
+  // Handle notification click - toggle sidebar
   const handleNotificationClick = () => {
-    onNotificationClick();
+    setIsNotificationSidebarOpen(!isNotificationSidebarOpen);
   };
   return (
     <Card className="flex flex-wrap items-left justify-between p-1 sm:p-1.5 md:p-2 bg-white rounded-t-xl shadow-sm relative">
@@ -262,6 +288,145 @@ export function Header({ onMenuClick, onNotificationClick, onCreateType, onAddPe
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Notification Sidebar */}
+      {isNotificationSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm" 
+            onClick={() => setIsNotificationSidebarOpen(false)}
+          />
+          
+          {/* Sidebar */}
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl border-l border-gray-200 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <Typography variant="h3" size="lg" className="font-semibold text-gray-900">
+                Notifications
+              </Typography>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsNotificationSidebarOpen(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-hidden">
+              {loading ? (
+                <div className="flex items-center justify-center h-32">
+                  <Typography variant="p" size="sm" color="muted">
+                    Loading notifications...
+                  </Typography>
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-32 px-4">
+                  <Bell className="h-8 w-8 text-gray-400 mb-2" />
+                  <Typography variant="p" size="sm" color="muted" align="center">
+                    No notifications yet
+                  </Typography>
+                </div>
+              ) : (
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-3">
+                    {notifications.map((notification) => (
+                      <Card 
+                        key={notification.id} 
+                        className={cn(
+                          "p-3 cursor-pointer transition-colors hover:bg-gray-50",
+                          !notification.read && "bg-blue-50 border-blue-200"
+                        )}
+                        onClick={() => markAsRead(notification.id)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0">
+                            {notification.type === 'candidate' && <Users className="h-4 w-4 text-blue-600" />}
+                            {notification.type === 'interview' && <Calendar className="h-4 w-4 text-green-600" />}
+                            {notification.type === 'interviewer' && <Users className="h-4 w-4 text-purple-600" />}
+                            {notification.type === 'general' && <Bell className="h-4 w-4 text-gray-600" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <Typography variant="p" size="sm" className="font-medium text-gray-900 truncate">
+                                {notification.title}
+                              </Typography>
+                              {!notification.read && (
+                                <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
+                              )}
+                            </div>
+                            <Typography variant="p" size="xs" color="muted" className="text-gray-600 mb-2">
+                              {notification.message}
+                            </Typography>
+                            <div className="flex items-center justify-between">
+                              <Typography variant="span" size="xs" color="muted" className="text-gray-500">
+                                {formatTimeAgo(new Date(notification.timestamp))}
+                              </Typography>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeNotification(notification.id);
+                                }}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            {notifications.length > 0 && (
+              <div className="border-t border-gray-200 p-4 space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={markAllAsRead}
+                  className="w-full"
+                  disabled={notifications.every(n => n.read)}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Mark All as Read
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await clearAllNotifications();
+                      // Close the sidebar since there are no notifications left
+                      setIsNotificationSidebarOpen(false);
+                    } catch (error) {
+                      addNotification({
+                        type: 'general',
+                        title: 'Error',
+                        message: 'Failed to clear notifications. Please try again.',
+                        icon: '❌'
+                      });
+                    }
+                  }}
+                  className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                  disabled={notifications.length === 0}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Clear All Notifications
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
